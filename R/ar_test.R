@@ -32,7 +32,7 @@
 #' \item{inst_tested}{Instrument coefficients actually tested.}
 #'
 #' @keywords internal
-.ar_test_core = function(object, beta0, vcov = NULL, ...) {
+.ar_test_core = function(object, beta0, vcov = NULL, orig_call = NULL, ...) {
   # Get endogenous variable names and instrument names
   endo_names <- object$iv_endo_names
   inst_names <- object$iv_inst_names_xpd # expanded instrument names
@@ -116,28 +116,62 @@
   }
 
   # Determine vcov specification
-  # If not specified, try to get from original object
-  if (is.null(vcov)) {
-    if (!is.null(object$cov.scaled)) {
-      vcov <- attr(object$cov.scaled, "type")
-    }
-    if (is.null(vcov)) {
-      vcov <- "iid"
-    }
+  # We want to preserve the original call's `vcov` argument (which may be
+  # an expression like "hetero" or a formula) unless the user provided an
+  # explicit `vcov` to this function. Avoid using the human-readable
+  # attribute `attr(object$cov.scaled, "type")` here because it contains
+  # descriptive text (e.g. "Heteroskedasticity-robust") that `feols()`
+  # does not accept as a `vcov` argument.
+  vcov_provided <- !missing(vcov) && !is.null(vcov)
+  vcov_arg_to_pass <- NULL
+
+  if (vcov_provided) {
+    vcov_arg_to_pass <- vcov
+  } else if (!is.null(object$call) && !is.null(object$call$vcov)) {
+    # Use the original call's vcov expression if available
+    vcov_arg_to_pass <- object$call$vcov
+  } else if (!is.null(object$cov.scaled)) {
+    # Fall back to the canonical name if available (but not the descriptive attr)
+    # Use 'iid' as final fallback
+    vcov_arg_to_pass <- "iid"
+  } else {
+    vcov_arg_to_pass <- "iid"
   }
 
   # Run the AR regression - inherit settings from original object where possible
-  ar_fit <- feols(
-    new_fml,
-    data = data,
-    weights = weights_val,
-    vcov = vcov,
-    notes = FALSE,
-    ...
-  )
+  # Prefer to reuse an original call (provided via `orig_call` or from the
+  # model object) so we preserve options like weights, vcov, and other args.
+  if (is.null(orig_call)) orig_call <- object$call
+
+  if (is.call(orig_call) && length(orig_call) > 0) {
+    call_to_eval <- as.call(orig_call)
+    call_to_eval[[1]] <- as.name("feols")
+    call_to_eval$fml <- new_fml
+    call_to_eval$data <- as.name("data")
+    call_to_eval$vcov <- vcov_arg_to_pass
+    call_to_eval$notes <- FALSE
+
+    dots <- list(...)
+    if (length(dots) > 0) {
+      for (nm in names(dots)) {
+        if (nzchar(nm)) call_to_eval[[nm]] <- dots[[nm]]
+      }
+    }
+
+    ar_fit <- eval(call_to_eval)
+  } else {
+    ar_fit <- feols(
+      new_fml,
+      data = data,
+      weights = weights_val,
+      vcov = vcov,
+      notes = FALSE,
+      ...
+    )
+  }
 
   # Summarize to ensure we have the VCOV
-  ar_fit_sum <- summary(ar_fit, vcov = vcov, ...)
+  ar_fit_sum <- summary(ar_fit, vcov = vcov_arg_to_pass, ...)
 
   # Get the coefficient names in the AR regression that correspond to instruments
   ar_coef_names <- names(ar_fit_sum$coefficients)
@@ -765,8 +799,8 @@ ar_test = function(
   }
   names(beta0) <- endo_names
 
-  # Run the core test
-  core_result <- .ar_test_core(object, beta0 = beta0, vcov = vcov, ...)
+  # Run the core test (pass original call so internal call can reuse options)
+  core_result <- .ar_test_core(object, beta0 = beta0, vcov = vcov, orig_call = object$call, ...)
 
   # Build the result object
   res <- list(
