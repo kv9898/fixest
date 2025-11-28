@@ -5,6 +5,50 @@
 #----------------------------------------------#
 
 # =============================================================================
+# INTERNAL HELPERS
+# =============================================================================
+
+#' Identify additional arguments beyond those supported by the exact AR CI
+#' @keywords internal
+.ar_exact_extra_args = function(object) {
+  call_obj <- object$call
+
+  if (is.null(call_obj)) {
+    return("call_missing")
+  }
+
+  call_list <- as.list(call_obj)[-1]
+  if (length(call_list) == 0) {
+    return(character(0))
+  }
+
+  arg_names <- names(call_list)
+  if (is.null(arg_names)) {
+    arg_names <- rep("", length(call_list))
+  }
+
+  allowed <- c("fml", "data", "vcov", "se")
+  extras <- character(0)
+  unnamed_seen <- 0L
+
+  for (nm in arg_names) {
+    if (!nzchar(nm)) {
+      unnamed_seen <- unnamed_seen + 1L
+      # Allow up to two unnamed positional arguments (formula, data)
+      if (unnamed_seen <= 2L) {
+        next
+      }
+      extras <- c(extras, paste0("positional#", unnamed_seen))
+    } else if (!(nm %in% allowed)) {
+      extras <- c(extras, nm)
+    }
+  }
+
+  unique(extras)
+}
+
+
+# =============================================================================
 # INTERNAL CORE FUNCTION
 # =============================================================================
 
@@ -504,6 +548,7 @@
   vcov = NULL,
   n_grid = 200,
   tol = 1e-8,
+  orig_call = NULL,
   ...
 ) {
   # Get point estimate and SE for grid construction
@@ -517,6 +562,7 @@
   }
 
   point_est <- object$coefficients[endo_coef_name]
+  # Summaries should use the same VCOV logic as the AR test core
   obj_sum <- summary(object, vcov = vcov, ...)
   se_est <- se(obj_sum)[endo_coef_name]
 
@@ -526,7 +572,13 @@
 
   # Get the critical value
   # First, run one AR test to determine distribution type
-  test_result <- .ar_test_core(object, beta0 = point_est, vcov = vcov, ...)
+  test_result <- .ar_test_core(
+    object,
+    beta0 = point_est,
+    vcov = vcov,
+    orig_call = orig_call,
+    ...
+  )
 
   if (test_result$dist == "F") {
     crit <- qf(level, df1 = test_result$df1, df2 = test_result$df2)
@@ -537,7 +589,13 @@
   # Evaluate g(beta0) = stat(beta0) - crit on the coarse grid
   g_values <- numeric(n_grid)
   for (i in seq_along(grid)) {
-    ar_res <- .ar_test_core(object, beta0 = grid[i], vcov = vcov, ...)
+    ar_res <- .ar_test_core(
+      object,
+      beta0 = grid[i],
+      vcov = vcov,
+      orig_call = orig_call,
+      ...
+    )
     g_values[i] <- ar_res$stat - crit
   }
 
@@ -558,7 +616,13 @@
     roots <- numeric(length(sign_changes))
 
     g_func <- function(beta0) {
-      ar_res <- .ar_test_core(object, beta0 = beta0, vcov = vcov, ...)
+      ar_res <- .ar_test_core(
+        object,
+        beta0 = beta0,
+        vcov = vcov,
+        orig_call = orig_call,
+        ...
+      )
       ar_res$stat - crit
     }
 
@@ -657,11 +721,12 @@
 #'   details on available options.
 #' @param level Numeric scalar between 0 and 1. The confidence level for the
 #'   optional confidence interval. Default is 0.95.
-#' @param ci Logical or NULL. Whether to compute an AR confidence interval.
+#' @param ci Logical or NULL or "numeric". Whether to compute an AR confidence interval.
 #'   If `NULL` (default):
 #'   - Returns CI if vcov is "iid" AND there is exactly one endogenous variable
 #'   - Does not return CI otherwise
 #'   If `TRUE`: Attempts to compute CI (warns if not possible with multiple endo vars)
+#'   If "numeric": Computes CI by numerical inversion of the AR test
 #'   If `FALSE`: Does not compute CI
 #' @param ... Additional arguments passed to [`summary.fixest`].
 #'
@@ -799,6 +864,11 @@ ar_test = function(
   }
   names(beta0) <- endo_names
 
+  # Determine whether the exact CI is allowed: requires iid, single endo, and
+  # no extra arguments (weights, clusters, demean, etc.) in the original call.
+  extra_args <- .ar_exact_extra_args(object)
+  allow_exact_ci <- length(extra_args) == 0
+
   # Run the core test (pass original call so internal call can reuse options)
   core_result <- .ar_test_core(object, beta0 = beta0, vcov = vcov, orig_call = object$call, ...)
 
@@ -822,30 +892,41 @@ ar_test = function(
   compute_ci <- FALSE
 
   if (is.null(ci)) {
-    # Default: compute CI only if iid and single endo var
-    if (core_result$is_iid && n_endo == 1) {
-      compute_ci <- TRUE
+    # Default: compute CI only if iid, single endo, and exact CI allowed
+    if (core_result$is_iid && n_endo == 1 && allow_exact_ci) {
+      ci <- TRUE
     }
-  } else if (isTRUE(ci)) {
+  } else if (ci != FALSE) {
     if (n_endo > 1) {
       warning(
         "Cannot compute AR confidence interval for models with multiple ",
         "endogenous variables. Returning test result only."
       )
-    } else {
-      compute_ci <- TRUE
     }
   }
-  # If ci = FALSE, compute_ci stays FALSE
 
   # Compute CI if requested
-  if (compute_ci) {
-    if (core_result$is_iid) {
+  if (ci != FALSE) {
+    if (core_result$is_iid && allow_exact_ci && ci != "numeric") {
       # Use exact closed-form CI
       ci_result <- .ar_ci_exact_iid(object, level = level)
     } else {
       # Use numeric inversion
-      ci_result <- .ar_ci_numeric(object, level = level, vcov = vcov, ...)
+      if (core_result$is_iid && !allow_exact_ci) {
+        warning(
+          "Exact AR confidence interval requires a simple feols call with only ",
+          "fml, data, vcov, optionally se. Additional arguments (",
+          paste(extra_args, collapse = ", "),
+          ") detected; falling back to numeric inversion."
+        )
+      }
+      ci_result <- .ar_ci_numeric(
+        object,
+        level = level,
+        vcov = vcov,
+        orig_call = object$call,
+        ...
+      )
     }
     res$ci <- ci_result
   }
