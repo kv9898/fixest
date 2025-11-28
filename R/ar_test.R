@@ -208,7 +208,7 @@
       new_fml,
       data = data,
       weights = weights_val,
-      vcov = vcov,
+      vcov = vcov_arg_to_pass,
       notes = FALSE,
       ...
     )
