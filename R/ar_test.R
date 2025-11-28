@@ -721,12 +721,12 @@
 #'   details on available options.
 #' @param level Numeric scalar between 0 and 1. The confidence level for the
 #'   optional confidence interval. Default is 0.95.
-#' @param ci Logical or NULL or "numeric". Whether to compute an AR confidence interval.
+#' @param ci Logical, NULL, or the string "numeric". Whether to compute an AR confidence interval.
 #'   If `NULL` (default):
 #'   - Returns CI if vcov is "iid" AND there is exactly one endogenous variable
 #'   - Does not return CI otherwise
 #'   If `TRUE`: Attempts to compute CI (warns if not possible with multiple endo vars)
-#'   If "numeric": Computes CI by numerical inversion of the AR test
+#'   If `"numeric"` (the string): Forces numeric inversion of the AR test to compute the confidence interval, even if the exact method is not available.
 #'   If `FALSE`: Does not compute CI
 #' @param ... Additional arguments passed to [`summary.fixest`].
 #'
