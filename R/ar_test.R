@@ -374,11 +374,12 @@
         slope_vars <- object$slope_variables_reordered
       }
 
-      # Demean using the internal algorithm (handles weights internally)
+      # Demean using the internal algorithm
+      # Note: cpp_demean handles weighted demeaning for FE
       all_vars_dm <- cpp_demean(
         all_vars,
         fixef_id,
-        weights = w,
+        weights = object$weights,
         iterMax = object$fixef.iter,
         diffMax = object$fixef.tol,
         nthreads = 1L,
