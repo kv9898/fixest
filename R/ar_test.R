@@ -893,6 +893,8 @@ ar_test = function(
     # Default: compute CI only if iid, single endo, and exact CI allowed
     if (core_result$is_iid && n_endo == 1 && allow_exact_ci) {
       ci <- TRUE
+    } else {
+      ci <- FALSE
     }
   } else if (ci != FALSE) {
     if (n_endo > 1) {
