@@ -902,6 +902,7 @@ ar_test = function(
         "Cannot compute AR confidence interval for models with multiple ",
         "endogenous variables. Returning test result only."
       )
+      ci <- FALSE
     }
   }
 
