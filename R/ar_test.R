@@ -88,6 +88,15 @@
   # Fetch the data
   data <- fetch_data(object, "To apply AR test, ")
 
+  # Apply obs_selection to filter data to the estimation sample
+  # obs_selection may contain indices for subset selection and/or 
+  # negative indices for removed observations (obsRemoved)
+  if (length(object$obs_selection) > 0) {
+    for (obs in object$obs_selection) {
+      data <- data[obs, , drop = FALSE]
+    }
+  }
+
   # Get the dependent variable
   fml_linear <- formula(object, type = "linear")
   y_vec <- eval(fml_linear[[2]], data)
@@ -323,6 +332,13 @@
 .ar_ci_exact_iid = function(object, level = 0.95) {
   # Fetch data
   data <- fetch_data(object, "To compute AR CI, ")
+
+  # Apply obs_selection to filter data to the estimation sample
+  if (length(object$obs_selection) > 0) {
+    for (obs in object$obs_selection) {
+      data <- data[obs, , drop = FALSE]
+    }
+  }
 
   # Get y, endogenous variable, and instruments
   fml_linear <- formula(object, type = "linear")
