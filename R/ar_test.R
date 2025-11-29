@@ -214,6 +214,7 @@
     call_to_eval[[1]] <- as.name("feols")
     call_to_eval$fml <- new_fml
     call_to_eval$data <- as.name("data")
+    call_to_eval$weights <- as.name("weights_val")
     if (vcov_provided) {
       call_to_eval$vcov <- vcov
     }
