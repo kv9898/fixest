@@ -3203,10 +3203,10 @@ test("fixest_ar" %in% class(ar_res), TRUE)
 # ivmodel gives: F=5.647947, df1=1, df2=97, p=0.019439
 ar_res_1 = ar_test(est_iv_ar, beta0 = 1)
 test(ar_res_1$beta0, 1)
-test(ar_res_1$stat, 5.647947, ~1e-4)
+test(round(ar_res_1$stat, 6), 5.647947)
 test(ar_res_1$df1, 1)
 test(ar_res_1$df2, 97)
-test(ar_res_1$pvalue, 0.019439, ~1e-4)
+test(round(ar_res_1$pvalue, 6), 0.019439)
 
 # Test 3: AR test with beta0 = 0 (should reject since true beta = 2)
 ar_res_null = ar_test(est_iv_ar, beta0 = 0)
