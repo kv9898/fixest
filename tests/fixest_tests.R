@@ -3226,14 +3226,14 @@ test(!is.null(ar_res$ci), TRUE)  # CI should be included for iid + single endo
 
 # Test 6: Verify exact CI values (validated against ivmodel package)
 # ivmodel CI: [1.2562, 2.5130]
-test(ar_res$ci$intervals[1, "lower"], 1.2562, ~1e-4)
-test(ar_res$ci$intervals[1, "upper"], 2.5130, ~1e-4)
+test(round(ar_res$ci$intervals[1, "lower"], 4), 1.2562)
+test(round(ar_res$ci$intervals[1, "upper"], 4), 2.5130)
 test(ar_res$ci$exact, TRUE)
 
 # Test 7: Numeric CI should match exact CI
 ar_res_numeric = ar_test(est_iv_ar, beta0 = 1, ci = "numeric")
-test(ar_res_numeric$ci$intervals[1, "lower"], 1.2562, ~1e-4)
-test(ar_res_numeric$ci$intervals[1, "upper"], 2.5130, ~1e-4)
+test(round(ar_res_numeric$ci$intervals[1, "lower"], 4), 1.2562)
+test(round(ar_res_numeric$ci$intervals[1, "upper"], 4), 2.5130)
 test(ar_res_numeric$ci$exact, FALSE)
 
 # Test 8: AR test with clustered SEs should use Chi-squared
